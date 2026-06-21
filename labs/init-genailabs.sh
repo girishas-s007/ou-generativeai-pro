@@ -167,6 +167,39 @@ sudo firewall-cmd --permanent --zone=public --remove-port=1521/tcp 2>/dev/null
 sudo firewall-cmd --reload
 echo "Firewall hardened. Only port 22 is open."
 
+# Install Oracle DB recovery script and auto-start on boot
+echo "Installing Oracle DB start script and systemd service..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/start-oracle-db.sh" ]; then
+  sudo cp "$SCRIPT_DIR/start-oracle-db.sh" /usr/local/bin/start-oracle-db.sh
+else
+  # cloud-init may run from a copy without sibling files; fetch from repo
+  sudo curl -fsSL \
+    "https://raw.githubusercontent.com/ou-developers/ou-generativeai-pro/main/labs/start-oracle-db.sh" \
+    -o /usr/local/bin/start-oracle-db.sh
+fi
+sudo chmod 755 /usr/local/bin/start-oracle-db.sh
+
+sudo tee /etc/systemd/system/oracle-db.service >/dev/null <<'UNIT'
+[Unit]
+Description=Oracle Database Free (Podman container 26ai)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/start-oracle-db.sh
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable oracle-db.service
+echo "Oracle DB will auto-start on boot (systemd: oracle-db.service)"
+
 # Now switch to opc for user-specific tasks
 sudo -u opc -i bash <<'EOF_OPC'
 
